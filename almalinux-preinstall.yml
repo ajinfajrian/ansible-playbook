@@ -15,7 +15,7 @@
         path: "/home/almalinux/.ssh/"
         owner: almalinux
         group: almalinux
-        mode: '0660'
+        mode: '0740'
         state: directory
 
     - name: create .authorized_keys
@@ -23,7 +23,7 @@
         path: "/home/almalinux/.ssh/authorized_keys"
         owner: almalinux
         group: almalinux
-        mode: '0660'
+        mode: '0400'
         state: touch
 
     - name: add ssh pubkey
@@ -32,7 +32,7 @@
         path: "/home/almalinux/.ssh/authorized_keys"
         owner: almalinux
         group: almalinux
-        mode: '0660'
+        mode: '0400'
         block: |
           ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIH/jpMd00hSkXILXNNvzic+PERIvou28UikpR7ayqgxo ed25519_04/04/22
 
