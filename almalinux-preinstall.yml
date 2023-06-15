@@ -36,6 +36,15 @@
         block: |
           ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIH/jpMd00hSkXILXNNvzic+PERIvou28UikpR7ayqgxo ed25519_04/04/22
 
+    - name: create motd value
+      ansible.builtin.blockinfile:
+        marker: ""
+        path: "/home/almalinux/.bashrc"
+        block: |
+          ### CUSTOM BASH
+          export HISTTIMEFORMAT="%d/%m/%Y %T "
+          export PS1='\[\033[01;31m\]\u\[\033[01;33m\]@\[\033[01;36m\]\h \[\033[01;33m\]\w \[\033[01;35m\]$ \[\033[00m\]'
+
     - name: create sudoers file
       ansible.builtin.file:
         path: "/etc/sudoers.d/99-newuser"
