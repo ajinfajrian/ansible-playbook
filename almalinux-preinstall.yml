@@ -67,6 +67,7 @@
           - golang
           - tmux
           - firewalld
+          - rsyslog
         state: latest
 
     - name: create motd banner file
@@ -95,6 +96,7 @@
         sed -i '/PasswordAuthentication/d' /etc/ssh/sshd_config
         sed -i '/MaxAuthTries/d' /etc/ssh/sshd_config
         sed -i '/PermitRootLogin/d' /etc/ssh/sshd_config
+        sed -i '/PubkeyAuthentication/d' /etc/ssh/sshd_config
 
     - name: hardening ssh
       ansible.builtin.blockinfile:
@@ -104,6 +106,7 @@
           Match User almalinux
           MaxAuthTries 2
           PermitRootLogin no
+          PubkeyAuthentication yes
           PasswordAuthentication no
 
     - name: upgrade latest mainline kernel
