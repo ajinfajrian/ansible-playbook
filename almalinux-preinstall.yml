@@ -2,36 +2,38 @@
   hosts: 127.0.0.1
   become: true
   become_user: root
+  vars:
+    - rhel_user: almalinux
   tasks:
-    - name: create almalinux user and attach sudo permission
+    - name: create {{ rhel_user }} user and attach sudo permission
       ansible.builtin.user:
         shell: /bin/bash
-        name: almalinux
+        name: {{ rhel_user }}
         groups: wheel
         append: yes
 
     - name: create .ssh folder
       ansible.builtin.file:
-        path: "/home/almalinux/.ssh/"
-        owner: almalinux
-        group: almalinux
+        path: "/home/{{ rhel_user }}/.ssh/"
+        owner: {{ rhel_user }}
+        group: {{ rhel_user }}
         mode: '0740'
         state: directory
 
     - name: create .authorized_keys
       ansible.builtin.file:
-        path: "/home/almalinux/.ssh/authorized_keys"
-        owner: almalinux
-        group: almalinux
+        path: "/home/{{ rhel_user }}/.ssh/authorized_keys"
+        owner: {{ rhel_user }}
+        group: {{ rhel_user }}
         mode: '0400'
         state: touch
 
     - name: add ssh pubkey
       ansible.builtin.blockinfile:
         marker: ""
-        path: "/home/almalinux/.ssh/authorized_keys"
-        owner: almalinux
-        group: almalinux
+        path: "/home/{{ rhel_user }}/.ssh/authorized_keys"
+        owner: {{ rhel_user }}
+        group: {{ rhel_user }}
         mode: '0400'
         block: |
           ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIH/jpMd00hSkXILXNNvzic+PERIvou28UikpR7ayqgxo ed25519_04/04/22
@@ -39,11 +41,11 @@
     - name: create motd value
       ansible.builtin.blockinfile:
         marker: ""
-        path: "/home/almalinux/.bashrc"
+        path: "/home/{{ rhel_user }}/.bashrc"
         block: |
           ### CUSTOM BASH
-          export HISTTIMEFORMAT="%d/%m/%Y %T "
-          export PS1='\[\033[01;31m\]\u\[\033[01;33m\]@\[\033[01;36m\]\h \[\033[01;33m\]\w \[\033[01;35m\]$ \[\033[00m\]'
+          HISTTIMEFORMAT="%d/%m/%Y %T "
+          PS1='\[\033[01;31m\]\u\[\033[01;33m\]@\[\033[01;36m\]\h \[\033[01;33m\]\w \[\033[01;35m\]$ \[\033[00m\]'
 
     - name: create sudoers file
       ansible.builtin.file:
@@ -55,8 +57,8 @@
         marker: ""
         path: "/etc/sudoers.d/99-newuser"
         block: |
-          # User rules for almalinux
-          almalinux ALL=(ALL) NOPASSWD:ALL
+          # User rules for {{ rhel_user }}
+          {{ rhel_user }} ALL=(ALL) NOPASSWD:ALL
 
     - name: installing depedencies
       ansible.builtin.dnf:
@@ -68,6 +70,9 @@
           - tmux
           - firewalld
           - rsyslog
+          - wget 
+          - nano 
+          - tar
         state: latest
 
     - name: create motd banner file
@@ -103,7 +108,7 @@
         path: /etc/ssh/sshd_config
         marker: ""
         block: |
-          Match User almalinux
+          Match User {{ rhel_user }}
           MaxAuthTries 2
           PermitRootLogin no
           PubkeyAuthentication yes
