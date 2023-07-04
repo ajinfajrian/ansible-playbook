@@ -1,0 +1,270 @@
+- name: Setup instance
+  hosts: k8s
+  become: true
+  become_user: root
+  tasks:
+  - name: Copy hosts file
+    copy:
+      src: /etc/hosts
+      dest: /etc/hosts
+      remote_src: no
+  - name: Copy private key
+    copy:
+      src: ~/.ssh/id_rsa
+      dest: /home/ubuntu/.ssh/id_rsa
+      remote_src: no
+      owner: ubuntu
+      group: ubuntu
+      mode: '0400'
+  - name: update packages
+    apt:
+      update_cache: yes
+      name: "*"
+      state: latest
+
+
+- name: Setup kubernetes cluster
+  hosts: k8s
+  become: true
+  become_user: root
+  tasks:
+    - name: create sysctl
+      ansible.builtin.copy:
+        dest: /etc/sysctl.d/99-kubernetes-cri.conf
+        content: |
+          net.bridge.bridge-nf-call-iptables  = 1
+          net.ipv4.ip_forward                 = 1
+          net.bridge.bridge-nf-call-ip6tables = 1
+
+    - name: create crictl config
+      ansible.builtin.copy:
+        dest: /etc/crictl.yaml
+        content: |
+          runtime-endpoint: unix:///var/run/containerd/containerd.sock
+          image-endpoint: unix:///var/run/containerd/containerd.sock
+          timeout: 30
+          debug: false
+
+    - name: enable sysctl
+      ansible.builtin.shell: sysctl --system        
+
+    - name: create modprobe
+      ansible.builtin.copy:
+        dest: /etc/modules-load.d/containerd.conf
+        content: |
+          overlay
+          br_netfilter
+
+    - name: enable modprobe
+      ansible.builtin.shell: sudo modprobe overlay && sudo modprobe br_netfilter
+        
+    - name: Install depedencies
+      ansible.builtin.apt:
+        update_cache: yes
+        pkg:
+          - apt-transport-https
+          - ca-certificates
+          - curl
+          - gnupg 
+          - lsb-release
+          - jq
+          - bash-completion
+          - golang
+        state: present
+
+    - name: Create keyrings
+      ansible.builtin.file:
+        path: /etc/apt/keyrings
+        state: directory
+
+    - name: setup repostiory Docker
+      ansible.builtin.shell: curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+   
+    - name: setup repository Docker #2
+      ansible.builtin.shell: echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+   
+    - name: install containerd.io
+      ansible.builtin.apt:
+        pkg:
+          - containerd.io
+        state: present
+        update_cache: yes
+
+    - name: Change to default config
+      ansible.builtin.shell: mkdir -p /etc/containerd && containerd config default > /etc/containerd/config.toml
+
+    - name: sed SystemdCgroup
+      ansible.builtin.shell: sed -i "s/SystemdCgroup = false/SystemdCgroup = true/g" /etc/containerd/config.toml
+
+    - name: Restart & enable containerd
+      ansible.builtin.systemd:
+        name: containerd
+        state: restarted
+        enabled: true
+
+    - name: setup kubernetes repository
+      ansible.builtin.shell: curl -s https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo apt-key add -
+
+    - name: setup kubernetes repository 2
+      ansible.builtin.shell: echo "deb https://apt.kubernetes.io/ kubernetes-xenial main" | sudo tee /etc/apt/sources.list.d/kubernetes.list
+
+    - name: Install kubeadm, kubelet, kubectl
+      ansible.builtin.apt:
+        pkg:
+          - kubelet
+          - kubeadm
+          - kubectl
+        update_cache: yes
+        state: present
+
+    - name: hold kubeadm, kubelet, kubectl
+      ansible.builtin.shell: sudo apt-mark hold kubelet kubeadm kubectl
+
+    - name: Disable swap
+      ansible.builtin.shell: swapoff -a && sed -i.bak -r 's/(.+ swap .+)/#\1/' /etc/fstab
+
+- name: Depedencies preparation on master
+  hosts: master
+  become: true
+  become_user: root
+  tasks:
+    - name: setup helm
+      args:
+          executable: /bin/bash
+      ansible.builtin.shell: |
+        curl https://baltocdn.com/helm/signing.asc | gpg --dearmor | sudo tee /usr/share/keyrings/helm.gpg > /dev/null
+        sudo apt-get install apt-transport-https --yes
+        echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/helm.gpg] https://baltocdn.com/helm/stable/debian/ all main" | sudo tee /etc/apt/sources.list.d/helm-stable-debian.list
+        sudo apt-get update && sudo apt-get install -y helm
+        helm repo add cilium https://helm.cilium.io/
+
+- name: Depedencies preparation on worker
+  hosts: worker
+  become: true
+  become_user: root
+  vars:
+    master1: 172.18.215.11
+    master2: 172.18.215.12
+    master3: 172.18.215.13
+  tasks:
+    - name: create folder /etc/kubernetes/manifests
+      ansible.builtin.file:
+        path: "/etc/kubernetes/manifests"
+        state: directory
+    - name: create folder /etc/nginx
+      ansible.builtin.file:
+        path: "/etc/nginx"
+        state: directory
+    - name: create nginx proxy
+      ansible.builtin.file:
+        path: "/etc/kubernetes/manifests/nginx-proxy.yaml"
+        state: touch
+    - name: create nginx config
+      ansible.builtin.file:
+        path: "/etc/nginx/nginx.conf"
+        state: touch
+    - name: create nginx config localhost loadbalance
+      ansible.builtin.blockinfile:
+        marker: ""
+        path: "/etc/kubernetes/manifests/nginx-proxy.yaml"
+        block: |
+          apiVersion: v1
+          kind: Pod
+          metadata:
+            name: nginx-proxy
+            namespace: kube-system
+            labels:
+              addonmanager.kubernetes.io/mode: Reconcile
+              k8s-app: kube-nginx
+            annotations:
+              nginx-cfg-checksum: "bab0e7413bec73c592060534832622943c972e1e"
+          spec:
+            hostNetwork: true
+            dnsPolicy: ClusterFirstWithHostNet
+            nodeSelector:
+              kubernetes.io/os: linux
+            priorityClassName: system-node-critical
+            containers:
+            - name: nginx-proxy
+              image: docker.io/library/nginx:1.23.2-alpine
+              imagePullPolicy: IfNotPresent
+              resources:
+                requests:
+                  cpu: 25m
+                  memory: 32M
+              livenessProbe:
+                httpGet:
+                  path: /healthz
+                  port: 8081
+              readinessProbe:
+                httpGet:
+                  path: /healthz
+                  port: 8081
+              volumeMounts:
+              - mountPath: /etc/nginx
+                name: etc-nginx
+                readOnly: true
+            volumes:
+            - name: etc-nginx
+              hostPath:
+                path: /etc/nginx
+
+    - name: create nginx config localhost loadbalance
+      ansible.builtin.blockinfile:
+        marker: ""
+        path: "/etc/nginx/nginx.conf"
+        block: |
+          error_log stderr notice;
+
+          worker_processes 2;
+          worker_rlimit_nofile 130048;
+          worker_shutdown_timeout 10s;
+
+          events {
+            multi_accept on;
+            use epoll;
+            worker_connections 16384;
+          }
+
+          stream {
+            upstream kube_apiserver {
+              least_conn;
+              server {{ master1 }}:6443;
+              server {{ master2 }}:6443;
+              server {{ master3 }}:6443;
+              }
+
+            server {
+              listen        127.0.0.1:6443;
+              listen        [::]:6443;
+              proxy_pass    kube_apiserver;
+              proxy_timeout 10m;
+              proxy_connect_timeout 1s;
+            }
+          }
+
+          http {
+            aio threads;
+            aio_write on;
+            tcp_nopush on;
+            tcp_nodelay on;
+
+            keepalive_timeout 5m;
+            keepalive_requests 100;
+            reset_timedout_connection on;
+            server_tokens off;
+            autoindex off;
+
+            server {
+              listen 8081;
+              listen [::]:8081;
+              location /healthz {
+                access_log off;
+                return 200;
+              }
+              location /stub_status {
+                stub_status on;
+                access_log off;
+              }
+            }
+          }
