@@ -163,7 +163,7 @@
       ansible.builtin.file:
         path: "/etc/nginx/nginx.conf"
         state: touch
-    - name: create nginx config localhost loadbalance
+    - name: create static pod nginx proxy
       ansible.builtin.blockinfile:
         marker: ""
         path: "/etc/kubernetes/manifests/nginx-proxy.yaml"
