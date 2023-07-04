@@ -1,7 +1,7 @@
 ## README
 
 1. Edit inventory file with your environment
-2. Edit vars on playbook `k8s-nginx-proxy.yaml`
+2. Edit vars on playbook `k8s-nginx-proxy.yaml` with your ip master
 
 ```yaml
 - name: Depedencies preparation on worker
@@ -17,4 +17,7 @@
 ansible -i inventory -m ping all
 ```
 
-5. ansible-playbook -i inventory k8s-nginx-proxy.yaml
+5. Running job
+```sh
+ansible-playbook -i inventory k8s-nginx-proxy.yaml
+```
