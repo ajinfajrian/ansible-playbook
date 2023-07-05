@@ -76,7 +76,12 @@
       ansible.builtin.file:
         path: /etc/apt/keyrings
         state: directory
-
+    
+    - name: remove gpg key if exists
+      ansible.builtin.file:
+        path: /etc/apt/keyrings/docker.gpg
+        state: absent
+    
     - name: setup repostiory Docker
       ansible.builtin.shell: curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
    
