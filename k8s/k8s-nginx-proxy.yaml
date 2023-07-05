@@ -133,6 +133,19 @@
   become: true
   become_user: root
   tasks:
+    - name: create auto completion & shortcuts
+      ansible.builtin.blockinfile:
+        marker: ""
+        path: "~/.bashrc"
+        block: |
+          ## kubernetes auto-completion
+          source <(kubectl completion bash)
+          source <(kubeadm completion bash)
+          source <(helm completion bash)
+          source <(crictl completion bash)
+          alias k=kubectl
+          complete -o default -F __start_kubectl k
+          
     - name: setup helm
       args:
           executable: /bin/bash
