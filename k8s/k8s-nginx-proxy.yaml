@@ -152,6 +152,14 @@
     master2: 172.18.215.12
     master3: 172.18.215.13
   tasks:
+    - name: deleting existing nginx config
+      ansible.builtin.file:
+        path: /etc/nginx/nginx.conf
+        state: absent
+    - name: deleting existing nginx static pod
+      ansible.builtin.file:
+        path: /etc/kubernetes/manifests/nginx-proxy.yaml
+        state: absent
     - name: create folder /etc/kubernetes/manifests
       ansible.builtin.file:
         path: "/etc/kubernetes/manifests"
