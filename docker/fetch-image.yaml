@@ -1,0 +1,10 @@
+- name: Fetch fluentbit image
+  hosts: k8s
+  become: true
+  become_user: root
+  tasks:
+    - name: docker container ls -a
+      tags: container_ls
+      become: True
+      shell:
+        "docker image ls | grep fluentbit"
